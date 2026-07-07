@@ -1,0 +1,13 @@
+/.bundle/
+/pkg/
+/tmp/
+*.gem
+Gemfile.lock
+.claude/worktrees
+
+# Claude Code local settings
+.claude/settings.local.json
+.claude/skills.local/
+.claude/hooks.local
+
+.DS_Store
