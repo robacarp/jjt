@@ -1,6 +1,5 @@
 # frozen_string_literal: true
 
-require "pathname"
 require "tomlib"
 
 module Jjt
@@ -21,24 +20,11 @@ module Jjt
       private
 
       def repo_config_path(start_dir)
-        root = find_repo_root(start_dir)
+        root = Jjt::Repo.root(start_dir)
         return nil unless root
 
         candidate = File.join(root, "jjt.toml")
         candidate if File.file?(candidate)
-      end
-
-      def find_repo_root(start_dir)
-        dir = Pathname.new(File.expand_path(start_dir))
-
-        loop do
-          return dir.to_s if dir.join(".jj").directory? || dir.join(".git").exist?
-
-          parent = dir.parent
-          return nil if parent == dir
-
-          dir = parent
-        end
       end
 
       def read_toml(path)

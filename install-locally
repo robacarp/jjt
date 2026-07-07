@@ -1,0 +1,43 @@
+#!/usr/bin/env bash
+# Build and install jjt as a real `jjt` command on this machine.
+set -euo pipefail
+
+cd "$(dirname "${BASH_SOURCE[0]}")"
+
+echo "==> Building gem"
+rm -f jjt-*.gem
+gem build jjt.gemspec
+
+echo "==> Installing gem"
+gem install --force ./jjt-*.gem
+rm -f jjt-*.gem
+
+BINDIR="$(ruby -rrubygems -e 'puts Gem.bindir')"
+SRC="$BINDIR/jjt"
+if [ ! -x "$SRC" ]; then
+  echo "error: expected executable not found at $SRC" >&2
+  exit 1
+fi
+
+DEST_DIR="$HOME/.local/bin"
+mkdir -p "$DEST_DIR"
+ln -sf "$SRC" "$DEST_DIR/jjt"
+echo "==> Linked $DEST_DIR/jjt -> $SRC"
+
+# The installed executable's shebang is hardcoded to the ruby that installed
+# it, so calling it directly always works. But if mise manages this ruby, it
+# auto-generates a *version-resolving* shim named `jjt` too, and that shim
+# looks up jjt inside whatever ruby is pinned in the current directory. Run
+# jjt from a project pinned to a different ruby (e.g. an app on ruby ~3.x)
+# and mise's shim errors out, since jjt was never installed under that ruby.
+# Remove that shim so PATH falls through to our fixed symlink instead.
+if command -v mise >/dev/null 2>&1; then
+  MISE_SHIM="$HOME/.local/share/mise/shims/jjt"
+  if [ -e "$MISE_SHIM" ]; then
+    rm -f "$MISE_SHIM"
+    echo "==> Removed mise shim at $MISE_SHIM (it breaks jjt under other pinned ruby versions)"
+  fi
+fi
+
+echo "==> Installed. Make sure $DEST_DIR is on your PATH."
+"$DEST_DIR/jjt" version

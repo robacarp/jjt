@@ -45,37 +45,58 @@ equivalent.
       with a two-thread lock-serialization spec. Default state file
       location/schema deferred to the command work that consumes it.
 - [ ] State recovery: if the state file is corrupt/missing, rebuild entries
-      from `jj workspace list` and mark them leased until verified
+      from `jj workspace list` and mark them leased until verified — deferred,
+      not needed until the state file schema/location has more real usage
 - [ ] In-use detection: process scanning (which PIDs have cwd inside a
       workspace path) + short-lived owner reservation, so two agents never
-      grab the same workspace — no daemon required
-- [ ] Dirty detection via `jj status` / `jj diff --stat` — jj auto-tracks
-      files (no gitignore-hidden-untracked-files problem like git has), so
-      this should be simpler than treehouse's version; confirm edge cases
-      (large/ignored dirs)
+      grab the same workspace — no daemon required — deferred, single-writer
+      `jjt get` is safe enough via the store's flock for now
+- [ ] Dirty detection via `jj status` / `jj diff --stat` — not yet consulted
+      by `acquire`/`release`; an idle-but-dirty workspace just gets silently
+      reset to `trunk()` on reuse right now
 - [ ] "Merged" check for prune safety: is the workspace's change an ancestor
       of / already in `trunk()` (revset equivalent of "merged into default
-      branch")
+      branch") — moot until `prune`/`destroy` are implemented
 
 ### Commands
 
-- [ ] `jjt` / `jjt get` — find an idle workspace, or create one with
-      `jj workspace add` if under `max_trees`; reset it to latest `trunk()`;
-      spawn a subshell inside it
-- [ ] `jjt get --lease [--lease-holder LABEL]` — same acquisition, no
+State: single **global** store at `~/.local/state/jjt/state.json` (or
+`$XDG_STATE_HOME/jjt/state.json`), keyed by workspace path with a
+`repo_root` field per entry — not per-repo. This was necessary because a
+pool workspace (`jj workspace add`) has its own `.jj` and is not a
+filesystem descendant of the original repo root, so walking up from inside
+one can't rediscover a repo-relative state file. `jjt get` exports
+`JJT_REPO_ROOT` into the spawned subshell so `jjt status` run from inside
+it still scopes correctly to the right repo; `jjt return`/`find_by_path`
+don't need it since they look up by path across all repos regardless.
+Default workspace storage root (when `jjt.toml`'s `root` isn't set):
+`~/.local/state/jjt/workspaces/<sha256(repo_root)[0,8]>/`.
+
+- [x] `jjt` / `jjt get [NAME]` — find an idle workspace of this repo, or
+      create one with `jj workspace add -r trunk()` if under `max_trees`;
+      spawns a subshell inside it (`Jjt::Pool#acquire`, `lib/jjt/cli.rb`).
+      Reusing an idle workspace resets it via `jj new trunk()`. Note: since
+      `trunk()` only resolves *remote* bookmarks (`main@origin` etc.), a
+      repo with no remote/tracked bookmark yet — like this one — resets to
+      the empty root commit. Real `jj` command syntax verified against a
+      scratch repo (see `spec/jjt/pool_integration_spec.rb`).
+- [x] `jjt get --lease [--lease-holder LABEL]` — same acquisition, no
       subshell: reserve it in state and print the path only
-- [ ] `jjt status` — pool state (idle/in-use/leased per workspace) + details
-      of the current workspace
-- [ ] `jjt return [PATH]` — release lease, stop processes running in that
-      workspace, return it to the idle pool
+- [x] `jjt status` — lists this repo's pool state (idle/in-use/leased per
+      workspace) + the current workspace if cwd is inside one
+- [x] `jjt return [PATH]` — release a workspace back to the idle pool
+      (defaults to cwd). Does NOT yet stop processes running in it — that's
+      tied to the deferred in-use-detection item above.
 - [ ] `jjt prune` — dry-run by default, `--yes` to actually remove. Safety
       checks: idle, clean, merged into trunk. Flags: `--all`, `--global`,
       `--verbose`, `--include-unlanded`, `--include-in-use`,
       `--include-leased`, `--prune-orphans`
 - [ ] `jjt destroy <path>` — targeted removal, safety checks by default,
       `--force` to skip
-- [ ] `jjt init` — write a default `jjt.toml`
+- [x] `jjt init` — writes a default `jjt.toml` (`max_trees = 16`) at the
+      repo root; errors if one already exists
 - [ ] `jjt update` — self-update
+- [x] `jjt version` — prints `Jjt::VERSION`
 
 ### No-branch-conflict story
 

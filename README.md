@@ -11,7 +11,10 @@ done — resetting it to the latest trunk along the way.
 
 ## Status
 
-Early scaffolding. The CLI commands are stubbed out and not yet implemented.
+`get`, `status`, `return`, `init`, and `version` work. `prune`, `destroy`,
+and `update` are still stubbed out. Pool state lives in a single global
+file (`~/.local/state/jjt/state.json`, or under `$XDG_STATE_HOME` if set),
+not per-repo — see `.claude/todo.md` for why.
 
 ## Installation
 

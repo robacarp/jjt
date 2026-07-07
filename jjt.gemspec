@@ -18,14 +18,13 @@ Gem::Specification.new do |spec|
   spec.metadata["homepage_uri"] = spec.homepage
   spec.metadata["source_code_uri"] = spec.homepage
 
-  spec.files = Dir.chdir(__dir__) do
-    `git ls-files -z`.split("\x0").reject do |f|
-      (File.expand_path(f) == __FILE__) ||
-        f.start_with?(*%w[bin/ test/ spec/ features/ .git .github appveyor Gemfile])
-    end
+  all_files = Dir.chdir(__dir__) { `git ls-files -z`.split("\x0") }
+  spec.files = all_files.reject do |f|
+    (File.expand_path(f) == __FILE__) ||
+      f.start_with?(*%w[test/ spec/ features/ .git .github appveyor Gemfile])
   end
   spec.bindir = "bin"
-  spec.executables = spec.files.grep(%r{\Abin/}) { |f| File.basename(f) }
+  spec.executables = all_files.grep(%r{\Abin/}) { |f| File.basename(f) }
   spec.require_paths = ["lib"]
 
   spec.add_dependency "thor", "~> 1.5"
