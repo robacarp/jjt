@@ -7,4 +7,5 @@ module Jjt
 end
 
 require_relative "jjt/config"
+require_relative "jjt/store"
 require_relative "jjt/cli"

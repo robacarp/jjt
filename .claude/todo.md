@@ -39,7 +39,11 @@ equivalent.
       (global defaults + hooks) — `Jjt::Config.load`, repo root found by
       walking up for `.jj`/`.git`, repo config wins over user config
       (hooks deep-merged), full rspec coverage
-- [ ] Pool state file (JSON), file-locked, atomic writes (tmp file + rename)
+- [x] Pool state file (JSON), file-locked, atomic writes (tmp file + rename)
+      — `Jjt::Store`: generic path, `flock`-guarded read/transaction, writes
+      go to a `.tmp` sibling then `rename`d into place; concurrency proven
+      with a two-thread lock-serialization spec. Default state file
+      location/schema deferred to the command work that consumes it.
 - [ ] State recovery: if the state file is corrupt/missing, rebuild entries
       from `jj workspace list` and mark them leased until verified
 - [ ] In-use detection: process scanning (which PIDs have cwd inside a
