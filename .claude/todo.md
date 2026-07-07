@@ -34,9 +34,11 @@ equivalent.
 
 ### Pool / state management
 
-- [ ] Config loader: repo-level `jjt.toml` (`max_trees`, default 16; optional
+- [x] Config loader: repo-level `jjt.toml` (`max_trees`, default 16; optional
       `root` dir for workspace storage) + user-level `~/.config/jjt/config.toml`
-      (global defaults + hooks)
+      (global defaults + hooks) — `Jjt::Config.load`, repo root found by
+      walking up for `.jj`/`.git`, repo config wins over user config
+      (hooks deep-merged), full rspec coverage
 - [ ] Pool state file (JSON), file-locked, atomic writes (tmp file + rename)
 - [ ] State recovery: if the state file is corrupt/missing, rebuild entries
       from `jj workspace list` and mark them leased until verified
