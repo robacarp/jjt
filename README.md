@@ -19,9 +19,13 @@ not per-repo — see `.claude/todo.md` for why.
 ## Installation
 
 ```
-bundle install
-bundle exec bin/jjt help
+./install-locally
 ```
+
+This builds the gem, installs it, and symlinks the `jjt` executable into
+`~/.local/bin`. Make sure that directory is on your `PATH`.
+
+To run it from source without installing, use `bundle exec bin/jjt` instead.
 
 ## Usage
 
