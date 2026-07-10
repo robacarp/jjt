@@ -13,6 +13,7 @@ module Jjt
       def load(start_dir: Dir.pwd, user_config_path: USER_CONFIG_PATH)
         user_data = read_toml(user_config_path)
         repo_data = read_toml(repo_config_path(start_dir))
+        repo_data.delete("hooks")
 
         new(deep_merge(user_data, repo_data))
       end

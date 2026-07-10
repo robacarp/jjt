@@ -65,9 +65,19 @@ RSpec.describe Jjt::Config do
 
   it "layers user config under repo config, with repo config winning on conflicts" do
     user_config = @tmp.join("user-config.toml")
-    write(user_config, <<~TOML)
-      max_trees = 2
+    write(user_config, "max_trees = 2\n")
 
+    dir = repo
+    write(dir.join("jjt.toml"), "max_trees = 5\n")
+
+    config = described_class.load(start_dir: dir.to_s, user_config_path: user_config.to_s)
+
+    expect(config.max_trees).to eq(5)
+  end
+
+  it "only honors hooks from user config, ignoring any set in repo-level jjt.toml" do
+    user_config = @tmp.join("user-config.toml")
+    write(user_config, <<~TOML)
       [hooks]
       post_create = "user post_create"
       pre_destroy = "user pre_destroy"
@@ -75,16 +85,13 @@ RSpec.describe Jjt::Config do
 
     dir = repo
     write(dir.join("jjt.toml"), <<~TOML)
-      max_trees = 5
-
       [hooks]
       post_create = "repo post_create"
     TOML
 
     config = described_class.load(start_dir: dir.to_s, user_config_path: user_config.to_s)
 
-    expect(config.max_trees).to eq(5)
-    expect(config.hooks).to eq(post_create: "repo post_create", pre_destroy: "user pre_destroy")
+    expect(config.hooks).to eq(post_create: "user post_create", pre_destroy: "user pre_destroy")
   end
 
   it "raises when max_trees is not a positive integer" do
