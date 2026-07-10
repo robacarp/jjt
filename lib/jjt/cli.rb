@@ -12,17 +12,15 @@ module Jjt
     def get(name = nil)
       with_error_handling do
         repo_root = resolve_repo_root
-        entry = Jjt::Pool.new(repo_root: repo_root).acquire(name: name, lease: options[:lease],
-                                                             lease_holder: options[:lease_holder])
+        pool = Jjt::Pool.new(repo_root: repo_root)
+        entry = pool.acquire(name: name, lease: options[:lease], lease_holder: options[:lease_holder])
 
         if options[:lease]
           puts entry.path
         else
           warn "jjt: workspace #{entry.name} ready at #{entry.path}"
-          warn "jjt: run `jjt return` (or exit the shell) when you're done"
-          ENV["JJT_REPO_ROOT"] = repo_root
-          Dir.chdir(entry.path)
-          Kernel.exec(ENV.fetch("SHELL", "/bin/sh"))
+          warn "jjt: run `jjt return`, or just exit the shell, when you're done"
+          exit(spawn_subshell(pool, entry, repo_root))
         end
       end
     end
@@ -165,6 +163,28 @@ module Jjt
         flags << candidate.entry.status if candidate.entry.status != "idle"
         flags << "unlanded work" if candidate.unlanded
         flags.empty? ? "" : " (#{flags.join(', ')})"
+      end
+
+      # A real subshell (not `exec`) so we can auto-release once it exits.
+      # SIGINT is ignored here while it runs so Ctrl-C reaches the subshell
+      # instead of killing jjt before the release below.
+      def spawn_subshell(pool, entry, repo_root)
+        prev_trap = Signal.trap("INT", "IGNORE")
+        system({ "JJT_REPO_ROOT" => repo_root }, ENV.fetch("SHELL", "/bin/sh"), chdir: entry.path)
+        $?.exitstatus || 1
+      ensure
+        Signal.trap("INT", prev_trap) if prev_trap
+        auto_release(pool, entry)
+      end
+
+      def auto_release(pool, entry)
+        current = pool.find_by_path(entry.path)
+        return unless current && current.status != "idle"
+
+        pool.release(entry.path)
+        warn "jjt: released #{entry.name} back to the idle pool"
+      rescue Jjt::Error => e
+        warn "jjt: failed to auto-release #{entry.name}: #{e.message}"
       end
     end
   end
