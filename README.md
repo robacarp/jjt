@@ -11,8 +11,10 @@ done — resetting it to the latest trunk along the way.
 
 ## Status
 
-`get`, `status`, `return`, `init`, and `version` work. `prune`, `destroy`,
-and `update` are still stubbed out. Pool state lives in a single global
+`get`, `status`, `return`, `prune`, `destroy`, `init`, and `version` work.
+`update` is still stubbed out. `get` auto-releases the workspace when its
+subshell exits, and `prune`/`destroy` refuse to remove anything with
+unlanded work unless told otherwise. Pool state lives in a single global
 file (`~/.local/state/jjt/state.json`, or under `$XDG_STATE_HOME` if set),
 not per-repo — see `.claude/todo.md` for why.
 

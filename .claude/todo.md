@@ -54,9 +54,12 @@ equivalent.
 - [ ] Dirty detection via `jj status` / `jj diff --stat` — not yet consulted
       by `acquire`/`release`; an idle-but-dirty workspace just gets silently
       reset to `trunk()` on reuse right now
-- [ ] "Merged" check for prune safety: is the workspace's change an ancestor
-      of / already in `trunk()` (revset equivalent of "merged into default
-      branch") — moot until `prune`/`destroy` are implemented
+- [x] "Merged" check for prune safety: `Jjt::Pool#unlanded_work?` runs
+      `jj log -r "(::@ ~ ::trunk()) ~ empty()"` — non-empty output means real
+      commits exist that aren't an ancestor of `trunk()` yet. Since `::@`
+      includes `@` itself, this also covers "clean" (an in-progress edit is
+      just a non-empty leaf commit) — one check does both, see
+      `spec/jjt/pool_integration_spec.rb`.
 
 ### Commands
 
@@ -87,12 +90,21 @@ Default workspace storage root (when `jjt.toml`'s `root` isn't set):
 - [x] `jjt return [PATH]` — release a workspace back to the idle pool
       (defaults to cwd). Does NOT yet stop processes running in it — that's
       tied to the deferred in-use-detection item above.
-- [ ] `jjt prune` — dry-run by default, `--yes` to actually remove. Safety
-      checks: idle, clean, merged into trunk. Flags: `--all`, `--global`,
-      `--verbose`, `--include-unlanded`, `--include-in-use`,
-      `--include-leased`, `--prune-orphans`
-- [ ] `jjt destroy <path>` — targeted removal, safety checks by default,
-      `--force` to skip
+- [x] `jjt get` also auto-releases on subshell exit now (not just `jjt
+      return`): spawns the shell as a real subprocess instead of `exec`,
+      ignores SIGINT while it runs so Ctrl-C reaches the subshell instead of
+      killing `jjt`, then releases in an `ensure` block keyed off exit.
+- [x] `jjt prune` — dry-run by default, `--yes` to actually remove. Safety
+      checks: idle, no unlanded work (see `unlanded_work?` above). Flags:
+      `--all` (shorthand for all four include/orphan flags below), `--global`
+      (scope to every repo in the store, not just this one), `--verbose`,
+      `--include-unlanded`, `--include-in-use`, `--include-leased`,
+      `--prune-orphans` (state rows whose workspace directory is gone).
+      `Jjt::Pool#prune_candidates` does the selection, `#remove` does the
+      actual forget+delete+drop-from-store.
+- [x] `jjt destroy <path>` — targeted removal via `Pool#remove`, same safety
+      checks as `prune` by default (idle + no unlanded work + directory still
+      exists), `--force` to skip all of them.
 - [x] `jjt init` — writes a default `jjt.toml` (`max_trees = 16`) at the
       repo root; errors if one already exists
 - [ ] `jjt update` — self-update
@@ -108,9 +120,11 @@ Default workspace storage root (when `jjt.toml`'s `root` isn't set):
 
 ### Hooks
 
-- [ ] `post_create` — runs after `jj workspace add` or after resetting a
+- [x] `post_create` — runs after `jj workspace add` or after resetting a
       reused workspace (e.g. install deps)
-- [ ] `pre_destroy` — runs before `jj workspace forget` (e.g. cleanup)
+- [x] `pre_destroy` — runs before `jj workspace forget`/directory delete (e.g.
+      cleanup). For a `--global` prune, this correctly loads the *owning*
+      repo's `jjt.toml`/hooks, not the caller's — see `Pool#remove`.
 
 ### Distribution
 

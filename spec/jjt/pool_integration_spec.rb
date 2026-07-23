@@ -41,5 +41,114 @@ RSpec.describe Jjt::Pool, "against a real jj repo" do
                                            chdir: anything).and_raise(Jjt::Error, "boom")
 
     expect { pool.acquire }.to raise_error(Jjt::Error, "boom")
+    expect(pool.list).to be_empty
+  end
+
+  context "with a post_create hook configured" do
+    let(:config) do
+      Jjt::Config.new(
+        "max_trees" => 2,
+        "root" => @tmp.join("workspaces").to_s,
+        "hooks" => { "post_create" => 'echo "$JJT_REPO_ROOT" > repo_root_seen_by_hook.txt' }
+      )
+    end
+
+    it "runs the hook in the new workspace with JJT_REPO_ROOT set" do
+      entry = pool.acquire
+
+      marker = File.join(entry.path, "repo_root_seen_by_hook.txt")
+      expect(File.read(marker).strip).to eq(@repo_root)
+    end
+
+    it "runs the hook again after resetting a reused workspace" do
+      entry = pool.acquire
+      pool.release(entry.path)
+      marker = File.join(entry.path, "repo_root_seen_by_hook.txt")
+      File.delete(marker)
+
+      pool.acquire
+
+      expect(File.exist?(marker)).to be(true)
+    end
+  end
+
+  describe "#unlanded_work?" do
+    it "is false for a freshly created workspace" do
+      entry = pool.acquire
+
+      expect(pool.unlanded_work?(entry.path)).to be(false)
+    end
+
+    it "is true once real work is committed in the workspace" do
+      entry = pool.acquire
+      File.write(File.join(entry.path, "notes.txt"), "wip\n")
+      Open3.capture2e("jj", "-R", entry.path, "describe", "-m", "wip")
+
+      expect(pool.unlanded_work?(entry.path)).to be(true)
+    end
+
+    it "goes back to false once the workspace is released and reset to trunk" do
+      entry = pool.acquire
+      File.write(File.join(entry.path, "notes.txt"), "wip\n")
+      Open3.capture2e("jj", "-R", entry.path, "describe", "-m", "wip")
+      pool.release(entry.path)
+
+      reused = pool.acquire
+
+      expect(pool.unlanded_work?(reused.path)).to be(false)
+    end
+  end
+
+  describe "#prune_candidates" do
+    it "only surfaces workspaces without unlanded work by default" do
+      # Acquired while `clean` is still in_use (not idle), so this is a
+      # distinct workspace rather than a reuse of `clean`'s.
+      clean = pool.acquire
+      dirty = pool.acquire
+      File.write(File.join(dirty.path, "notes.txt"), "wip\n")
+      Open3.capture2e("jj", "-R", dirty.path, "describe", "-m", "wip")
+
+      pool.release(clean.path)
+      pool.release(dirty.path)
+
+      expect(pool.prune_candidates.map { |c| c.entry.path }).to eq([clean.path])
+
+      widened = pool.prune_candidates(include_unlanded: true).map { |c| c.entry.path }
+      expect(widened).to contain_exactly(clean.path, dirty.path)
+    end
+  end
+
+  describe "#remove" do
+    it "forgets the jj workspace and deletes the directory" do
+      entry = pool.acquire
+      path = entry.path
+
+      pool.remove(entry)
+
+      expect(Dir.exist?(path)).to be(false)
+      expect(pool.find_by_path(path)).to be_nil
+
+      workspace_list = Open3.capture2("jj", "-R", @repo_root, "workspace", "list").first
+      expect(workspace_list).not_to include(entry.name)
+    end
+  end
+
+  context "with a pre_destroy hook configured" do
+    let(:marker) { @tmp.join("pre_destroy_seen.txt") }
+    let(:config) do
+      Jjt::Config.new(
+        "max_trees" => 2,
+        "root" => @tmp.join("workspaces").to_s,
+        "hooks" => { "pre_destroy" => %(echo "$JJT_REPO_ROOT" > "#{marker}") }
+      )
+    end
+
+    it "runs the hook, in the workspace, before it's removed" do
+      entry = pool.acquire
+
+      pool.remove(entry)
+
+      expect(File.read(marker).strip).to eq(@repo_root)
+    end
   end
 end

@@ -65,13 +65,62 @@ module Jjt
     method_option :include_leased, type: :boolean, default: false
     method_option :prune_orphans, type: :boolean, default: false
     def prune
-      raise NotImplementedError
+      with_error_handling do
+        pool = Jjt::Pool.new(repo_root: resolve_repo_root)
+        all = options[:all]
+        candidates = pool.prune_candidates(
+          global: options[:global],
+          include_unlanded: all || options[:include_unlanded],
+          include_in_use: all || options[:include_in_use],
+          include_leased: all || options[:include_leased],
+          prune_orphans: all || options[:prune_orphans]
+        )
+
+        if candidates.empty?
+          puts "jjt: nothing to prune"
+          next
+        end
+
+        verb = options[:yes] ? "removed" : "would remove"
+        candidates.each do |c|
+          pool.remove(c.entry) if options[:yes]
+          line = "jjt: #{verb} #{c.entry.name}#{candidate_flags(c)}"
+          line += " (#{c.entry.repo_root})" if options[:verbose]
+          line += "\t#{c.entry.path}"
+          puts line
+        end
+
+        puts "jjt: #{candidates.size} workspace(s) would be removed (pass --yes to actually remove)" unless options[:yes]
+      end
     end
 
     desc "destroy PATH", "Remove a specific workspace"
     method_option :force, type: :boolean, default: false, desc: "Skip safety checks"
     def destroy(path)
-      raise NotImplementedError
+      with_error_handling do
+        pool = Jjt::Pool.new
+        entry = pool.find_by_path(path)
+        raise Jjt::Error, "#{path} is not a known jjt workspace" unless entry
+
+        unless options[:force]
+          unless entry.status == "idle"
+            raise Jjt::Error, "workspace #{entry.name} is #{entry.status}; pass --force to remove it anyway"
+          end
+
+          unless Dir.exist?(entry.path)
+            raise Jjt::Error,
+                  "#{entry.path} no longer exists; pass --force to drop #{entry.name} anyway, " \
+                  "or use `jjt prune --prune-orphans`"
+          end
+
+          if pool.unlanded_work?(entry.path)
+            raise Jjt::Error, "workspace #{entry.name} has unlanded work; pass --force to remove it anyway"
+          end
+        end
+
+        pool.remove(entry)
+        puts "jjt: removed #{entry.name}"
+      end
     end
 
     desc "init", "Write a default jjt.toml"
@@ -108,6 +157,14 @@ module Jjt
 
       def resolve_repo_root
         ENV["JJT_REPO_ROOT"] || Jjt::Repo.root!
+      end
+
+      def candidate_flags(candidate)
+        flags = []
+        flags << "orphan" if candidate.orphan
+        flags << candidate.entry.status if candidate.entry.status != "idle"
+        flags << "unlanded work" if candidate.unlanded
+        flags.empty? ? "" : " (#{flags.join(', ')})"
       end
     end
   end
