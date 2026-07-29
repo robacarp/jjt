@@ -211,7 +211,7 @@ module Jjt
     end
 
     def workspace_root
-      @config.root ? File.expand_path(@config.root) : File.join(DEFAULT_STATE_DIR, "workspaces", repo_id)
+      @config.root ? File.expand_path(@config.root, @repo_root) : File.join(DEFAULT_STATE_DIR, "workspaces", repo_id)
     end
 
     def repo_id

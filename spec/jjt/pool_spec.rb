@@ -35,6 +35,16 @@ RSpec.describe Jjt::Pool do
     expect(Jjt::Repo).not_to have_received(:jj).with("new", "trunk()", chdir: anything)
   end
 
+  it "resolves a relative config root against repo_root, not the process cwd" do
+    repo_root_dir = @tmp.join("myrepo").to_s
+    relative_config = Jjt::Config.new("max_trees" => 2, "root" => "workspaces")
+    relative_pool = described_class.new(repo_root: repo_root_dir, config: relative_config, store: store)
+
+    entry = Dir.chdir(@tmp.to_s) { relative_pool.acquire }
+
+    expect(entry.path).to start_with(File.join(repo_root_dir, "workspaces"))
+  end
+
   it "reuses an idle workspace instead of creating a new one" do
     first = pool.acquire
     pool.release(first.path)
