@@ -91,6 +91,16 @@ RSpec.describe Jjt::Pool do
     expect(found.repo_root).to eq(other_repo_root)
   end
 
+  it "looks up a workspace's repo_root by path alone, with no bound pool instance" do
+    entry = pool.acquire
+
+    expect(described_class.repo_root_for(entry.path, store: store)).to eq(repo_root)
+  end
+
+  it "returns nil from repo_root_for when the path isn't a known workspace" do
+    expect(described_class.repo_root_for("/nope", store: store)).to be_nil
+  end
+
   it "reacquires a specific idle workspace by name" do
     entry = pool.acquire
     pool.release(entry.path)

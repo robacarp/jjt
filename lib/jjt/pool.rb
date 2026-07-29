@@ -17,6 +17,17 @@ module Jjt
     DEFAULT_STATE_DIR = File.join(ENV.fetch("XDG_STATE_HOME") { File.join(Dir.home, ".local", "state") }, "jjt")
     DEFAULT_STATE_PATH = File.join(DEFAULT_STATE_DIR, "state.json")
 
+    # The repo_root recorded for a workspace path, without needing to already
+    # know which repo owns it. Lets a shell sitting in a pool workspace
+    # self-identify even without JJT_REPO_ROOT in its environment (e.g. a new
+    # terminal tab that only inherited the working directory, not the env of
+    # the shell `jjt get` spawned).
+    def self.repo_root_for(path, store: Jjt::Store.new(DEFAULT_STATE_PATH))
+      path = File.expand_path(path)
+      _, attrs = store.read.fetch("workspaces", {}).find { |_, a| File.expand_path(a["path"]) == path }
+      attrs && attrs["repo_root"]
+    end
+
     def initialize(repo_root: Jjt::Repo.root!, config: Jjt::Config.load(start_dir: repo_root),
                     store: Jjt::Store.new(DEFAULT_STATE_PATH))
       @repo_root = File.expand_path(repo_root)

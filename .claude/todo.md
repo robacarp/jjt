@@ -70,8 +70,14 @@ pool workspace (`jj workspace add`) has its own `.jj` and is not a
 filesystem descendant of the original repo root, so walking up from inside
 one can't rediscover a repo-relative state file. `jjt get` exports
 `JJT_REPO_ROOT` into the spawned subshell so `jjt status` run from inside
-it still scopes correctly to the right repo; `jjt return`/`find_by_path`
-don't need it since they look up by path across all repos regardless.
+it still scopes correctly to the right repo. `resolve_repo_root` also falls
+back to `Pool.repo_root_for(Dir.pwd)` (a store lookup by cwd) before it
+falls back further to walking up for `.jj`/`.git` — otherwise a second
+shell that only inherited the workspace's cwd (a new terminal tab, say),
+without `JJT_REPO_ROOT` in its env, would resolve its own repo_root to the
+workspace's own `.jj` instead of the real originating repo. `jjt
+return`/`find_by_path` don't need any of this since they look up by path
+across all repos regardless.
 Default workspace storage root (when `jjt.toml`'s `root` isn't set):
 `~/.local/state/jjt/workspaces/<sha256(repo_root)[0,8]>/`.
 

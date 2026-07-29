@@ -154,7 +154,7 @@ module Jjt
       end
 
       def resolve_repo_root
-        ENV["JJT_REPO_ROOT"] || Jjt::Repo.root!
+        ENV["JJT_REPO_ROOT"] || Jjt::Pool.repo_root_for(Dir.pwd) || Jjt::Repo.root!
       end
 
       def candidate_flags(candidate)
