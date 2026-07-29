@@ -101,10 +101,34 @@ RSpec.describe Jjt::Pool do
     expect(found.repo_root).to eq(other_repo_root)
   end
 
+  it "finds a workspace by a subdirectory nested inside its checkout" do
+    entry = pool.acquire
+
+    found = pool.find_by_path(File.join(entry.path, "terraform/districts/production"))
+
+    expect(found.name).to eq(entry.name)
+  end
+
+  it "does not treat a sibling directory with a similar name prefix as a match" do
+    entry = pool.acquire
+
+    found = pool.find_by_path("#{entry.path}-other/subdir")
+
+    expect(found).to be_nil
+  end
+
   it "looks up a workspace's repo_root by path alone, with no bound pool instance" do
     entry = pool.acquire
 
     expect(described_class.repo_root_for(entry.path, store: store)).to eq(repo_root)
+  end
+
+  it "looks up repo_root from a subdirectory nested inside the workspace checkout" do
+    entry = pool.acquire
+
+    found = described_class.repo_root_for(File.join(entry.path, "terraform/districts/production"), store: store)
+
+    expect(found).to eq(repo_root)
   end
 
   it "returns nil from repo_root_for when the path isn't a known workspace" do

@@ -17,14 +17,24 @@ module Jjt
     DEFAULT_STATE_DIR = File.join(ENV.fetch("XDG_STATE_HOME") { File.join(Dir.home, ".local", "state") }, "jjt")
     DEFAULT_STATE_PATH = File.join(DEFAULT_STATE_DIR, "state.json")
 
+    # The workspace entry containing `path` — either its own root, or a
+    # descendant directory within it (e.g. cwd is a subdirectory of the
+    # checkout). Shared by `find_by_path` and `repo_root_for` below.
+    def self.entry_containing(path, workspaces)
+      path = File.expand_path(path)
+      workspaces.find do |_, attrs|
+        ws_path = File.expand_path(attrs["path"])
+        path == ws_path || path.start_with?("#{ws_path}#{File::SEPARATOR}")
+      end
+    end
+
     # The repo_root recorded for a workspace path, without needing to already
     # know which repo owns it. Lets a shell sitting in a pool workspace
     # self-identify even without JJT_REPO_ROOT in its environment (e.g. a new
     # terminal tab that only inherited the working directory, not the env of
     # the shell `jjt get` spawned).
     def self.repo_root_for(path, store: Jjt::Store.new(DEFAULT_STATE_PATH))
-      path = File.expand_path(path)
-      _, attrs = store.read.fetch("workspaces", {}).find { |_, a| File.expand_path(a["path"]) == path }
+      _, attrs = entry_containing(path, store.read.fetch("workspaces", {}))
       attrs && attrs["repo_root"]
     end
 
@@ -40,8 +50,7 @@ module Jjt
     end
 
     def find_by_path(path)
-      path = File.expand_path(path)
-      entry = all_workspaces(@store.read).find { |_, attrs| File.expand_path(attrs["path"]) == path }
+      entry = self.class.entry_containing(path, all_workspaces(@store.read))
       entry && build_entry(*entry)
     end
 

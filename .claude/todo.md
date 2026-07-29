@@ -88,7 +88,16 @@ Default workspace storage root (when `jjt.toml`'s `root` isn't set):
       `trunk()` only resolves *remote* bookmarks (`main@origin` etc.), a
       repo with no remote/tracked bookmark yet — like this one — resets to
       the empty root commit. Real `jj` command syntax verified against a
-      scratch repo (see `spec/jjt/pool_integration_spec.rb`).
+      scratch repo (see `spec/jjt/pool_integration_spec.rb`). If cwd (or a
+      subdirectory of it) is already a known workspace and no `NAME` was
+      given, `get` skips acquisition entirely and just spawns a subshell in
+      place — otherwise a second terminal tab that only inherited the
+      working directory (not the leasing shell's state) would get handed a
+      *different* idle workspace of the same repo instead of the one it was
+      already sitting in. That fast path also skips auto-release on exit,
+      since this invocation never leased the workspace itself and another
+      shell may still be using it. `Pool#find_by_path`/`Pool.repo_root_for`
+      match ancestor directories, not just the exact workspace root.
 - [x] `jjt get --lease [--lease-holder LABEL]` — same acquisition, no
       subshell: reserve it in state and print the path only
 - [x] `jjt status` — lists this repo's pool state (idle/in-use/leased per

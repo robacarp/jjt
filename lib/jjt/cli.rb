@@ -13,6 +13,18 @@ module Jjt
       with_error_handling do
         repo_root = resolve_repo_root
         pool = Jjt::Pool.new(repo_root: repo_root)
+        current = pool.find_by_path(Dir.pwd) if name.nil?
+
+        if current
+          if options[:lease]
+            puts current.path
+          else
+            warn "jjt: already inside workspace #{current.name} (#{current.status}) at #{current.path}"
+            exit(spawn_subshell_here(repo_root))
+          end
+          next
+        end
+
         entry = pool.acquire(name: name, lease: options[:lease], lease_holder: options[:lease_holder])
 
         if options[:lease]
@@ -175,6 +187,19 @@ module Jjt
       ensure
         Signal.trap("INT", prev_trap) if prev_trap
         auto_release(pool, entry)
+      end
+
+      # For a shell that's already sitting inside a known workspace (cwd is
+      # the workspace root or a subdirectory of it): spawns a subshell in
+      # place, without touching pool state. This invocation didn't lease the
+      # workspace, so it doesn't auto-release it on exit either — another
+      # shell may still be actively using it.
+      def spawn_subshell_here(repo_root)
+        prev_trap = Signal.trap("INT", "IGNORE")
+        system({ "JJT_REPO_ROOT" => repo_root }, ENV.fetch("SHELL", "/bin/sh"))
+        $?.exitstatus || 1
+      ensure
+        Signal.trap("INT", prev_trap) if prev_trap
       end
 
       def auto_release(pool, entry)
