@@ -4,6 +4,15 @@ require "thor"
 
 module Jjt
   class CLI < Thor
+    def self.exit_on_failure?
+      true
+    end
+
+    # Without this, Thor doesn't recognize `--version`/`-v` as the `version`
+    # command — it falls through to `default_task :get` instead, which
+    # creates a workspace literally named "--version".
+    map %w[--version -v] => :version
+
     default_task :get
 
     desc "get [NAME]", "Find an idle workspace, or create one, and spawn a subshell inside it"
