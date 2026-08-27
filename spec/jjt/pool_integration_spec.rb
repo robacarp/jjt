@@ -35,6 +35,26 @@ RSpec.describe Jjt::Pool, "against a real jj repo" do
     expect(reused.status).to eq("in_use")
   end
 
+  it "recovers automatically when a reused workspace's working copy is stale" do
+    stale = pool.acquire
+    other = pool.acquire
+    pool.release(stale.path)
+
+    stale_commit = Open3.capture2("jj", "-R", stale.path, "log", "--no-graph", "-r", "@", "-T", "commit_id")
+                         .first.strip
+
+    # Same staleness trigger as the `#unlanded_work?` spec below, but this
+    # time it's hit via `acquire`'s reset-to-trunk on a reused workspace,
+    # which is what a plain `jjt get` runs through.
+    _out, err, status = Open3.capture3("jj", "-R", other.path, "abandon", stale_commit)
+    raise "test setup failed: #{err}" unless status.success?
+
+    reused = pool.acquire
+
+    expect(reused.path).to eq(stale.path)
+    expect(reused.status).to eq("in_use")
+  end
+
   it "raises a clear error when the underlying jj command fails" do
     allow(Jjt::Repo).to receive(:jj).and_call_original
     allow(Jjt::Repo).to receive(:jj).with("workspace", "add", "-r", "trunk()", anything,
@@ -96,6 +116,23 @@ RSpec.describe Jjt::Pool, "against a real jj repo" do
       reused = pool.acquire
 
       expect(pool.unlanded_work?(reused.path)).to be(false)
+    end
+
+    it "recovers automatically when the workspace's working copy is stale" do
+      stale = pool.acquire
+      other = pool.acquire
+
+      stale_commit = Open3.capture2("jj", "-R", stale.path, "log", "--no-graph", "-r", "@", "-T", "commit_id")
+                           .first.strip
+
+      # Abandoning a workspace's working-copy commit from a *different*
+      # workspace is exactly what makes that workspace's on-disk checkout go
+      # stale in jj — the same situation `jjt destroy`/`jj workspace forget`
+      # on one pool workspace put every other workspace into.
+      _out, err, status = Open3.capture3("jj", "-R", other.path, "abandon", stale_commit)
+      raise "test setup failed: #{err}" unless status.success?
+
+      expect(pool.unlanded_work?(stale.path)).to be(false)
     end
   end
 

@@ -125,9 +125,7 @@ module Jjt
     # workspace with an in-progress edit just shows up as its own non-empty
     # commit here, since @ is included in `::@`.
     def unlanded_work?(path)
-      output = Jjt::Repo.jj("log", "-r", "(::@ ~ ::trunk()) ~ empty()", "--no-graph", "-T", 'commit_id ++ "\n"',
-                             chdir: path)
-      !output.strip.empty?
+      !run_unlanded_log(path).strip.empty?
     end
 
     # Candidates for `prune`. Default scope is idle workspaces of this repo
@@ -151,7 +149,13 @@ module Jjt
         next if entry.status == "leased" && !include_leased
         next if entry.status == "in_use" && !include_in_use
 
-        unlanded = unlanded_work?(entry.path)
+        begin
+          unlanded = unlanded_work?(entry.path)
+        rescue Jjt::Error => e
+          warn "jjt: could not check #{entry.name} (#{e.message}); skipping " \
+               "— use `jjt destroy #{entry.path} --force` to remove it directly"
+          next
+        end
         next if unlanded && !include_unlanded
 
         Candidate.new(entry: entry, orphan: false, unlanded: unlanded)
@@ -182,6 +186,25 @@ module Jjt
     end
 
     private
+
+    # A workspace's on-disk checkout goes stale whenever some other
+    # workspace's operation (e.g. `jj workspace forget`) advances the repo's
+    # shared operation log — jj itself recommends `jj workspace update-stale`
+    # as the fix, so try that once before giving up. Wraps any jj command run
+    # against a pool workspace's checkout, e.g. the unlanded-work log and
+    # resetting a reused workspace to trunk.
+    def jj_in_workspace(path, *args, retried_stale: false)
+      Jjt::Repo.jj(*args, chdir: path)
+    rescue Jjt::Error => e
+      raise if retried_stale || !e.message.include?("working copy is stale")
+
+      Jjt::Repo.jj("workspace", "update-stale", chdir: path)
+      jj_in_workspace(path, *args, retried_stale: true)
+    end
+
+    def run_unlanded_log(path)
+      jj_in_workspace(path, "log", "-r", "(::@ ~ ::trunk()) ~ empty()", "--no-graph", "-T", 'commit_id ++ "\n"')
+    end
 
     def forget_workspace(entry)
       Jjt::Repo.jj("workspace", "forget", entry.name, chdir: entry.repo_root)
@@ -248,7 +271,7 @@ module Jjt
     end
 
     def reset_to_trunk(path)
-      Jjt::Repo.jj("new", "trunk()", chdir: path)
+      jj_in_workspace(path, "new", "trunk()")
     end
 
     def create_workspace_on_disk(path)

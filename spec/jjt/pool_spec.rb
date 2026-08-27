@@ -175,11 +175,67 @@ RSpec.describe Jjt::Pool do
     expect(other_entry.repo_root).to eq(other_repo_root)
   end
 
+  it "recovers once from a stale working copy when resetting a reused workspace" do
+    first = pool.acquire
+    pool.release(first.path)
+
+    new_calls = 0
+    allow(Jjt::Repo).to receive(:jj) do |*args, **_kwargs|
+      next "" unless args.first == "new"
+
+      new_calls += 1
+      if new_calls == 1
+        raise Jjt::Error, "`jj new trunk()` failed: Error: The working copy is stale " \
+                           "(not updated since operation abc123)."
+      end
+
+      ""
+    end
+
+    second = pool.acquire
+
+    expect(second.path).to eq(first.path)
+    expect(new_calls).to eq(2)
+    expect(Jjt::Repo).to have_received(:jj).with("workspace", "update-stale", chdir: first.path).once
+  end
+
   it "drops the reservation if `jj workspace add` fails" do
     allow(Jjt::Repo).to receive(:jj).and_raise(Jjt::Error, "boom")
 
     expect { pool.acquire }.to raise_error(Jjt::Error, "boom")
     expect(pool.list).to be_empty
+  end
+
+  describe "#unlanded_work?" do
+    it "recovers once from a stale working copy by running update-stale and retrying" do
+      log_calls = 0
+      allow(Jjt::Repo).to receive(:jj) do |*args, **_kwargs|
+        next "" unless args.first == "log"
+
+        log_calls += 1
+        if log_calls == 1
+          raise Jjt::Error, "`jj log ...` failed: Error: The working copy is stale " \
+                             "(not updated since operation abc123)."
+        end
+
+        "abc123\n"
+      end
+
+      expect(pool.unlanded_work?("/some/path")).to be(true)
+      expect(log_calls).to eq(2)
+      expect(Jjt::Repo).to have_received(:jj).with("workspace", "update-stale", chdir: "/some/path").once
+    end
+
+    it "propagates other errors without retrying" do
+      allow(Jjt::Repo).to receive(:jj) do |*args, **_kwargs|
+        raise Jjt::Error, "Workspace `ws-x` doesn't have a working-copy commit" if args.first == "log"
+
+        ""
+      end
+
+      expect { pool.unlanded_work?("/some/path") }.to raise_error(Jjt::Error, /working-copy commit/)
+      expect(Jjt::Repo).not_to have_received(:jj).with("workspace", "update-stale", anything)
+    end
   end
 
   describe "#prune_candidates" do
@@ -237,6 +293,33 @@ RSpec.describe Jjt::Pool do
       widened = pool.prune_candidates(prune_orphans: true)
       expect(widened.map { |c| c.entry.path }).to eq([entry.path])
       expect(widened.first.orphan).to be(true)
+    end
+
+    it "warns and skips a workspace whose safety check fails, without aborting the rest of the scan" do
+      # Acquired while `broken` is still in_use (not idle), so this is a
+      # distinct workspace rather than a reuse of `broken`'s.
+      broken = pool.acquire
+      FileUtils.mkdir_p(broken.path)
+      healthy = pool.acquire
+      FileUtils.mkdir_p(healthy.path)
+
+      pool.release(broken.path)
+      pool.release(healthy.path)
+
+      allow(Jjt::Repo).to receive(:jj) do |*args, **kwargs|
+        if args.first == "log" && kwargs[:chdir] == broken.path
+          raise Jjt::Error, "Workspace `#{broken.name}` doesn't have a working-copy commit"
+        end
+
+        ""
+      end
+
+      result = nil
+      expect { result = pool.prune_candidates }
+        .to output(/could not check.*#{Regexp.escape(broken.name)}.*destroy #{Regexp.escape(broken.path)} --force/)
+        .to_stderr
+
+      expect(result.map { |c| c.entry.path }).to eq([healthy.path])
     end
 
     it "never surfaces a workspace that is still mid-creation" do
