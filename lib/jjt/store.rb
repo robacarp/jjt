@@ -35,7 +35,7 @@ module Jjt
       FileUtils.mkdir_p(File.dirname(@path))
 
       File.open(@lock_path, File::CREAT | File::RDWR, 0o644) do |lock_file|
-        lock_file.flock(File::LOCK_EX)
+        Jjt::Trace.step("store lock wait") { lock_file.flock(File::LOCK_EX) }
         yield
       end
     end

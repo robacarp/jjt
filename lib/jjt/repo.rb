@@ -27,7 +27,9 @@ module Jjt
     end
 
     def jj(*args, chdir:)
-      stdout, stderr, status = Open3.capture3("jj", "-R", chdir.to_s, *args)
+      stdout, stderr, status = Jjt::Trace.step("jj #{args.join(' ')}") do
+        Open3.capture3("jj", "-R", chdir.to_s, *args)
+      end
       raise Jjt::Error, "`jj #{args.join(' ')}` failed: #{stderr.strip}" unless status.success?
 
       stdout

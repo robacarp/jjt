@@ -40,6 +40,9 @@ jjt destroy   # remove a specific workspace
 jjt init      # write a default jjt.toml
 ```
 
+If `jjt get` is slow to hand back a shell, set `JJT_DEBUG=1` to print how
+long each step (store lock wait, `jj` invocations, hooks) took to stderr.
+
 ## Development
 
 ```

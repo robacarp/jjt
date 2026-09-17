@@ -6,6 +6,7 @@ module Jjt
   class Error < StandardError; end
 end
 
+require_relative "jjt/trace"
 require_relative "jjt/repo"
 require_relative "jjt/config"
 require_relative "jjt/store"

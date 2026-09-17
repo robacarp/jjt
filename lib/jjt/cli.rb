@@ -20,7 +20,7 @@ module Jjt
     method_option :lease_holder, type: :string, desc: "Label to record as the lease holder"
     def get(name = nil)
       with_error_handling do
-        repo_root = resolve_repo_root
+        repo_root = Jjt::Trace.step("resolve repo root") { resolve_repo_root }
         pool = Jjt::Pool.new(repo_root: repo_root)
         current = pool.find_by_path(Dir.pwd) if name.nil?
 
@@ -34,7 +34,9 @@ module Jjt
           next
         end
 
-        entry = pool.acquire(name: name, lease: options[:lease], lease_holder: options[:lease_holder])
+        entry = Jjt::Trace.step("pool acquire") do
+          pool.acquire(name: name, lease: options[:lease], lease_holder: options[:lease_holder])
+        end
 
         if options[:lease]
           puts entry.path

@@ -311,7 +311,9 @@ module Jjt
     # the caller without a workspace.
     def run_hooks(name, path, repo_root: @repo_root, config: @config)
       Array(config.hooks[name]).each do |command|
-        system({ "JJT_REPO_ROOT" => repo_root }, command, chdir: path)
+        Jjt::Trace.step("#{name} hook #{command}") do
+          system({ "JJT_REPO_ROOT" => repo_root }, command, chdir: path)
+        end
         warn "jjt: #{name} hook failed (#{command.inspect})" unless $?.success?
       end
     end
